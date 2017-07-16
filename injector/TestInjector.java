@@ -2,6 +2,7 @@ package injector;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -376,7 +377,7 @@ public class TestInjector
 		}
 	}
 
-	@Test
+	// @Test
 	public void testRouteFlowUpFaultRandom()
 	{
 		RouteFlow rf = new RouteFlow();
@@ -440,15 +441,15 @@ public class TestInjector
 			case UP:
 				rf.addLink(1, 1, 2, 1);
 				rf.switchPortChanged(-1, null, t);
-				
+
 				// Toggle: link up -> link down, link up
 				rfp.removeLink(1, 1, 2, 1);
 				rfp.switchPortChanged(-1, null, PortChangeType.DOWN);
-				Assert.assertEquals(rf.links.size(), rfp.links.size()+1);
+				Assert.assertEquals(rf.links.size(), rfp.links.size() + 1);
 				ImmutablePort port = new ImmutablePort(1, 1, 2, 1);
 				rfp.switchPortChanged(-1, port, t);
 				rfp.addLink(1, 1, 2, 1);
-				
+
 				Assert.assertTrue(rf.links.keySet().equals(rfp.links.keySet()));
 				break;
 			default:
@@ -458,4 +459,193 @@ public class TestInjector
 			}
 		}
 	}
+
+	// single transform: l1 down -> s1 down (s1 up is assumed to follow)
+	// @Test
+	public void testRouteFlowDownFaultSingle()
+	{
+		RouteFlow rf = new RouteFlow();
+		RouteFlowPortDownFault rfp = new RouteFlowPortDownFault();
+		int count = 0;
+
+		/*         l1
+		 *  s1(1) ----(1) s2
+		 *   (2)       (2)
+		 *     \       /
+		 *   l2 \     / l3
+		 *      (1) (2)
+		 *        s3
+		 */
+		for (int i = 1; i <= 3; i++)
+		{
+			rf.switchAdded(i);
+			rf.switchActivated(i);
+			rfp.switchAdded(i);
+			rfp.switchActivated(i);
+		}
+		Assert.assertTrue(rf.getActiveSws().equals(rfp.getActiveSws()));
+		Assert.assertEquals(rf.getActiveSws().size(), 3);
+
+		rf.addLink(1, 1, 2, 1); // l1
+		rf.addLink(1, 2, 3, 1); // l2
+		rf.addLink(2, 2, 3, 2); // l3
+		rfp.addLink(1, 1, 2, 1);
+		rfp.addLink(1, 2, 3, 1);
+		rfp.addLink(2, 2, 3, 2);
+
+		Assert.assertTrue(rf.links.keySet().equals(rfp.links.keySet()));
+		Assert.assertEquals(rf.links.keySet().size(), 3);
+
+		// random events
+		List<Pair<IOFSwitch.PortChangeType, Double>> dist = new ArrayList<Pair<IOFSwitch.PortChangeType, Double>>();
+		for (IOFSwitch.PortChangeType t : IOFSwitch.PortChangeType.values())
+		{
+			dist.add(new Pair<IOFSwitch.PortChangeType, Double>(t,
+					1.0 / IOFSwitch.PortChangeType.values().length));
+		}
+
+		List<IOFSwitch.PortChangeType> events = new ArrayList<IOFSwitch.PortChangeType>();
+		for (int i = 0; i < 10; i++)
+		{
+			IOFSwitch.PortChangeType t = Util.randomGet(dist);
+			System.out.println("Random type: " + t);
+			events.add(t);
+		}
+		System.out.println("---------------");
+
+		for (IOFSwitch.PortChangeType t : events)
+		{
+			switch (t)
+			{
+			case DOWN:
+				rf.removeLink(1, 1, 2, 1);
+				rf.switchPortChanged(-1, null, t);
+
+				// l1 down -> s1 down + s1 up
+				// dist: 3
+				// s1 down
+				rfp.switchRemoved(1);
+				rfp.removeLink(1, 1, 2, 1);
+				rfp.removeLink(1, 2, 3, 1);
+				Assert.assertFalse(rf.links.keySet().equals(rfp.links.keySet()));
+				Assert.assertEquals(rf.links.keySet().size(), 2);
+				Assert.assertEquals(rf.links.keySet().size(), rfp.links
+						.keySet().size() + 1);
+				Assert.assertFalse(rf.getActiveSws().equals(rfp.getActiveSws()));
+				Assert.assertEquals(rf.getActiveSws().size(), 3);
+				Assert.assertEquals(rf.getActiveSws().size(), rfp
+						.getActiveSws().size() + 1);
+
+				// s1 up
+				rfp.switchAdded(1);
+				rfp.switchActivated(1);
+				Assert.assertTrue(rf.getActiveSws().equals(rfp.getActiveSws()));
+
+				count = 1;
+				break;
+			case UP:
+				rf.addLink(1, 1, 2, 1);
+				rf.switchPortChanged(-1, null, t);
+				rfp.addLink(1, 1, 2, 1);
+				rfp.switchPortChanged(-1, null, t);
+				if (count > 0)
+					count++;
+				break;
+			// borrow for l2 up
+			case ADD:
+				rf.addLink(1, 2, 3, 1);
+				rf.switchPortChanged(-1, null, IOFSwitch.PortChangeType.UP);
+				rfp.addLink(1, 2, 3, 1);
+				rfp.switchPortChanged(-1, null, IOFSwitch.PortChangeType.UP);
+				Assert.assertTrue(rf.links.keySet().equals(rfp.links.keySet()));
+				if (count > 0)
+				{
+					count++;
+					System.err.println("dist: " + count);
+					count = 0;
+				}
+				break;
+			default:
+				rf.switchPortChanged(-1, null, t);
+				rfp.switchPortChanged(-1, null, t);
+				if (count > 0)
+					count++;
+				break;
+			}
+		}
+	}
+
+	@Test
+	public void testRouteFlowReorderFaultRandom()
+	{
+		RouteFlow rf = new RouteFlow();
+		RouteFlowPortUpFault rfp = new RouteFlowPortUpFault();
+		int count = 1;
+
+		/*         l1
+		 *  s1(1) ----(1) s2
+		 *   (2)       (2)
+		 *     \       /
+		 *   l2 \     / l3
+		 *      (1) (2)
+		 *        s3
+		 */
+		for (int i = 2; i <= 3; i++)
+		{
+			rf.switchAdded(i);
+			rf.switchActivated(i);
+			rfp.switchAdded(i);
+			rfp.switchActivated(i);
+		}
+		Assert.assertTrue(rf.getActiveSws().equals(rfp.getActiveSws()));
+		Assert.assertEquals(rf.getActiveSws().size(), 2);
+
+		// rf.addLink(1, 1, 2, 1); // l1
+		// rf.addLink(1, 2, 3, 1); // l2
+		rf.addLink(2, 2, 3, 2); // l3
+		// rfp.addLink(1, 1, 2, 1);
+		// rfp.addLink(1, 2, 3, 1);
+		rfp.addLink(2, 2, 3, 2);
+
+		Assert.assertTrue(rf.links.keySet().equals(rfp.links.keySet()));
+		Assert.assertEquals(rf.links.keySet().size(), 1);
+
+		// l1 up without s1 up
+		rf.addLink(1, 1, 2, 1);
+		try
+		{
+			rfp.addLink(1, 1, 2, 1);
+		} catch (Error e)
+		{
+			System.out.println("Caught the exception");
+			Assert.assertFalse(rf.links.keySet().equals(rfp.links.keySet()));
+			Assert.assertEquals(rf.links.keySet().size(), 2);
+			Assert.assertEquals(rfp.links.keySet().size(), 1);
+		}
+
+		double p = 0.5;
+		Random random = new Random();
+		double r = random.nextDouble();
+		while (r < p)
+		{
+			count++;
+			System.out.println("count: " + count);
+			r = random.nextDouble();
+		}
+		// E[D] = 1/(1-p)
+		System.err.println("dist: " + count);
+
+		// s1 up
+		rf.switchAdded(1);
+		rf.switchActivated(1);
+		rfp.switchAdded(1);
+		rfp.switchActivated(1);
+
+		// l1 up
+		rfp.addLink(1, 1, 2, 1);
+
+		Assert.assertTrue(rf.getActiveSws().equals(rfp.getActiveSws()));
+		Assert.assertTrue(rf.links.keySet().equals(rfp.links.keySet()));
+	}
+
 }

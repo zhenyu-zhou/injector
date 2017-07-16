@@ -4,7 +4,7 @@ import floodlight_core.IOFSwitch;
 import floodlight_core.ImmutablePort;
 import floodlight_core.Link;
 
-public class RouteFlowPortUpFault extends RouteFlow
+public class RouteFlowPortReorderFault extends RouteFlow
 {
 	@Override
 	public void switchPortChanged(long switchId, ImmutablePort port,
@@ -18,10 +18,10 @@ public class RouteFlowPortUpFault extends RouteFlow
 				Link l = new Link(port.srcId, port.srcPort, port.dstId,
 						port.dstPort);
 				System.out.println("Insert link: " + l);
-				// Shouldn't take a link up twice
-				if (links.containsKey(l))
+				// The switch is unknown
+				if (!this.activeSws.contains(port.srcId) || !this.activeSws.contains(port.dstId))
 				{
-					final String errMsg = "Panicking on taking up a port twice!";
+					final String errMsg = "Panicking on an unknown switch!";
 					System.err.println(errMsg);
 					// System.exit(1);
 					// Redundant exception, just for testing.
