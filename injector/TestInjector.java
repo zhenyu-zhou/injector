@@ -575,7 +575,7 @@ public class TestInjector
 		}
 	}
 
-	@Test
+	// @Test
 	public void testRouteFlowReorderFaultRandom()
 	{
 		RouteFlow rf = new RouteFlow();
@@ -646,6 +646,56 @@ public class TestInjector
 
 		Assert.assertTrue(rf.getActiveSws().equals(rfp.getActiveSws()));
 		Assert.assertTrue(rf.links.keySet().equals(rfp.links.keySet()));
+	}
+
+	// @Test
+	public int testModel(int n, int target)
+	{
+		List<Pair<Integer, Double>> dist = new ArrayList<Pair<Integer, Double>>();
+		int temp = -1;
+		int count = 1;
+		
+		System.out.println("n: " + n);
+		System.out.println("target: " + target);
+
+		for (int i = 1; i <= n; i++)
+		{
+			dist.add(new Pair<Integer, Double>(i, 1.0 / n));
+		}
+		
+		temp = Util.randomGet(dist);
+		// System.out.println("temp: " + temp);
+
+		// p = target / n
+		while (temp > target)
+		{
+			temp = Util.randomGet(dist);
+			// System.out.println("temp: " + temp);
+			count++;
+		}
+
+		// System.out.println("dist: " + count);
+		return count;
+	}
+
+	@Test
+	public void testMulModel()
+	{
+		int T = 5;
+		int[] n = { 8, 20 };
+		int[] target = { 1, 1 };
+		assert (n.length == target.length);
+
+		for (int i = 0; i < T; i++)
+		{
+			int dist = 0;
+			for (int j = 0; j < n.length; j++)
+			{
+				dist += testModel(n[j], target[j]);
+			}
+			System.out.println("dist: " + dist);
+			System.out.println("-------------");
+		}
 	}
 
 }
